@@ -43,7 +43,7 @@ jobs:
           soloVersion: 0.87.1
 
       - name: Run TCK test
-        uses: manishdait/hiero-tck-runner@main
+        uses: hiero-hackers/hiero-tck-action@main
 ```
 
 ### Python SDK Dockerfile

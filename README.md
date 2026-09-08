@@ -13,7 +13,7 @@ Add this step to your GitHub Actions workflow file (e.g., `.github/workflows/tck
 
 ```yaml
 - name: Run Hiero TCK Test Suite
-  uses: manishdait/hiero-tck-runner@main
+  uses: hiero-hackers/hiero-tck-action@main
   with:
     dockerfilePath: './tck/Dockerfile'
     serverEnv: |
@@ -73,7 +73,7 @@ code, so a worker killed mid-run fails the job instead of silently passing. Expe
 minutes**. Nothing needs configuring:
 
 ```yml
-- uses: manishdait/hiero-tck-runner@main
+- uses: hiero-hackers/hiero-tck-action@main
   with:
     dockerfilePath: './tck/Dockerfile'
 ```
@@ -112,7 +112,7 @@ strategy:
 steps:
   - uses: hiero-ledger/hiero-solo-action@v0.24.0   # one network per shard
     with: { installMirrorNode: true }
-  - uses: manishdait/hiero-tck-runner@main
+  - uses: hiero-hackers/hiero-tck-action@main
     with:
       testMatrix: ${{ matrix.spec }}
       artifactName: tck-report-${{ matrix.shard }}
@@ -156,7 +156,7 @@ To act on the results yourself, give the step an `id` and read its outputs:
 ```yml
 - name: Run TCK test
   id: tck
-  uses: manishdait/hiero-tck-runner@main
+  uses: hiero-hackers/hiero-tck-action@main
 
 - name: Report
   if: always()
@@ -217,7 +217,7 @@ jobs:
 
       - name: Run TCK
         id: tck
-        uses: manishdait/hiero-tck-runner@main
+        uses: hiero-hackers/hiero-tck-action@main
         with:
           dockerfilePath: './tck/Dockerfile'
           serverEnv: |

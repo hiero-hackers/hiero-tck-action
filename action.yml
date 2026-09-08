@@ -1,6 +1,6 @@
-name: "Hiero TCK Runner"
+name: "Hiero TCK Action"
 description: "Runs Hiero SDK Technology Compatibility Kit (TCK) tests"
-author: "Manish Dait"
+author: "Hiero Hackers"
 
 branding:
   icon: "check-square"
