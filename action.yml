@@ -1,0 +1,505 @@
+name: "Hiero TCK Runner"
+description: "Runs Hiero SDK Technology Compatibility Kit (TCK) tests"
+author: "Manish Dait"
+
+branding:
+  icon: "check-square"
+  color: "purple"
+
+inputs:
+  # --- Server under test ---------------------------------------------------
+  startServer:
+    description: >
+      Build and run the JSON-RPC server from dockerfilePath. Set to false when the workflow
+      starts the server itself, in which case it must be backgrounded and torn down by the
+      workflow, and the action only waits for it to answer. Its main purpose is to make a
+      missing dockerfilePath an error instead of a silent skip: without it, a mistyped path
+      would run the whole suite against nothing.
+    required: false
+    default: "true"
+  dockerfilePath:
+    description: "Path to the Dockerfile relative to repository root. Only used when startServer is true."
+    required: false
+    default: "./Dockerfile"
+  rpcServerPort:
+    description: "Port of the target JSON-RPC server under test"
+    required: false
+    default: "8544"
+  serverEnv:
+    description: "Environment variables passed to the server container, one KEY=VALUE per line. Use this to tell the server which port to bind, e.g. TCK_PORT=8544."
+    required: false
+    default: ""
+  serverStartupTimeout:
+    description: "Seconds to wait for the JSON-RPC server to become ready"
+    required: false
+    default: "120"
+
+  # --- Network under test --------------------------------------------------
+  nodeIp:
+    description: "IP address and port of the consensus node"
+    required: false
+    default: "127.0.0.1:35211"
+  nodeAccountId:
+    description: "Account ID of the consensus node"
+    required: false
+    default: "0.0.3"
+  operatorAccountId:
+    description: "Operator account ID used to sign transactions"
+    required: false
+    default: "0.0.2"
+  operatorPrivateKey:
+    description: "Operator account private key. Masked in logs. Never pass a key with real value."
+    required: false
+    default: '302e020100300506032b65700422042091132178e72057a1d7528025956fe39b0b847f200ab59b2fdd367017f3087137'
+  mirrornodeGrpcUrl:
+    description: "Address for the mirror node gRPC service"
+    required: false
+    default: "127.0.0.1:5600"
+  mirrornodeRestUrl:
+    description: "REST API URL for the mirror node"
+    required: false
+    default: "http://127.0.0.1:38081"
+  mirrornodeRestJavaUrl:
+    description: "Java-based REST API URL for the mirror node"
+    required: false
+    default: "http://127.0.0.1:8084"
+  nodeTimeout:
+    description: "Consensus node request timeout in milliseconds"
+    required: false
+    default: "30000"
+
+  # --- Which tests to run --------------------------------------------------
+  tckTag:
+    description: "Tag or Commit SHA of hiero-sdk-tck"
+    required: false
+    default: "v0.12.4"
+  testMatrix:
+    description: >
+      Which tests to run, as mocha arguments: spec files or globs relative to the TCK root,
+      optionally with filters such as --grep. Quoted phrases are honoured. Runs only these,
+      via the TCK's test:file script, and overrides testScript. Pairs with a job matrix for
+      sharding: pass the matrix value straight in as testMatrix. Empty runs the whole suite.
+      Examples: "src/tests/token-service/*.ts"
+                "src/tests/crypto-service/test-account-create-transaction.ts"
+                "src/tests/crypto-service/*.ts --grep 'Creates an account'"
+    required: false
+    default: ""
+  testScript:
+    description: "npm script used for a whole-suite run, when testMatrix is empty. Defaults to the TCK's own test:ci, which runs the full suite in parallel and gates on the mochawesome report rather than mocha's exit code. Falls back to 'test' on tags that predate test:ci. Set explicitly to override, e.g. 'test:serial'."
+    required: false
+    default: "test:ci"
+
+  # --- Reporting -----------------------------------------------------------
+  uploadReport:
+    description: "Upload the mochawesome TCK report as a workflow artifact"
+    required: false
+    default: "true"
+  artifactName:
+    description: "Name of the uploaded report artifact. Vary this per matrix leg to avoid collisions."
+    required: false
+    default: "tck-report"
+
+outputs:
+  total:
+    description: "Total number of TCK tests executed"
+    value: ${{ steps.results.outputs.total }}
+  passed:
+    description: "Number of passing TCK tests"
+    value: ${{ steps.results.outputs.passed }}
+  failed:
+    description: "Number of failing TCK tests"
+    value: ${{ steps.results.outputs.failed }}
+  pending:
+    description: "Number of pending TCK tests"
+    value: ${{ steps.results.outputs.pending }}
+  hookFailures:
+    description: "Number of failed suite hooks, counted separately from test failures"
+    value: ${{ steps.results.outputs.hookFailures }}
+  skipped:
+    description: "Number of registered tests that never ran, usually because a suite hook failed"
+    value: ${{ steps.results.outputs.skipped }}
+  registered:
+    description: "Number of tests registered by the suite, including those that never ran"
+    value: ${{ steps.results.outputs.registered }}
+  genuineFailures:
+    description: "Failures that are real test assertion failures, excluding server and network errors"
+    value: ${{ steps.results.outputs.genuineFailures }}
+  infraFailures:
+    description: "Failures caused by server or network errors rather than SDK incompatibility"
+    value: ${{ steps.results.outputs.infraFailures }}
+  unimplementedMethods:
+    description: "Comma-separated JSON-RPC methods the server under test does not implement"
+    value: ${{ steps.results.outputs.unimplementedMethods }}
+  reportPath:
+    description: "Path to the generated mochawesome report directory, empty if no report was produced"
+    value: ${{ steps.results.outputs.reportPath }}
+
+runs:
+  using: "composite"
+  steps:
+    # Inputs are passed through `env:` rather than interpolated into the script
+    # body, so that a value containing shell metacharacters cannot break out.
+    - name: Prepare TCK Run
+      id: prep
+      shell: bash
+      env:
+        OPERATOR_KEY: ${{ inputs.operatorPrivateKey }}
+      run: |
+        echo "::add-mask::${OPERATOR_KEY}"
+
+        # Unique per action invocation, so concurrent jobs on a self-hosted
+        # runner cannot clobber each other's container.
+        SUFFIX="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${RANDOM}"
+        echo "HIERO_RPC_CONTAINER=hiero-rpc-${SUFFIX}" >> "$GITHUB_ENV"
+        echo "HIERO_RPC_IMAGE=hiero-rpc-server:${SUFFIX}" >> "$GITHUB_ENV"
+
+    - name: Checkout Hiero TCK Repository
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        repository: 'hiero-ledger/hiero-sdk-tck'
+        ref: ${{ inputs.tckTag }}
+        path: 'hiero-tck'
+
+    - name: Setup Node.js
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        node-version: 22
+        cache: 'npm'
+        cache-dependency-path: 'hiero-tck/package-lock.json'
+
+    - name: Install TCK Dependencies
+      shell: bash
+      working-directory: 'hiero-tck'
+      run: npm ci
+
+    - name: Build and Start TCK Server Container
+      shell: bash
+      env:
+        START_SERVER: ${{ inputs.startServer }}
+        DOCKERFILE_PATH: ${{ inputs.dockerfilePath }}
+        SERVER_ENV: ${{ inputs.serverEnv }}
+      run: |
+        if [ "$START_SERVER" != "true" ]; then
+          echo "startServer is false - expecting the workflow to have started a server already."
+          exit 0
+        fi
+
+        if [ ! -f "$DOCKERFILE_PATH" ]; then
+          echo "::error title=Dockerfile not found::No Dockerfile at '${DOCKERFILE_PATH}'. Set dockerfilePath to its location, or set startServer to false if the workflow starts the server itself."
+          exit 1
+        fi
+
+        # One `-e KEY=VALUE` per non-empty, non-comment line of serverEnv.
+        ENV_ARGS=()
+        while IFS= read -r line; do
+          line="${line#"${line%%[![:space:]]*}"}"
+          line="${line%"${line##*[![:space:]]}"}"
+          [ -z "$line" ] && continue
+          case "$line" in \#*) continue ;; esac
+          ENV_ARGS+=(-e "$line")
+          echo "Passing ${line%%=*} to the server container."
+        done <<< "$SERVER_ENV"
+
+        echo "Building server image from ${DOCKERFILE_PATH}..."
+        docker build -t "$HIERO_RPC_IMAGE" -f "$DOCKERFILE_PATH" .
+
+        docker run -d --network host --name "$HIERO_RPC_CONTAINER" "${ENV_ARGS[@]}" "$HIERO_RPC_IMAGE"
+
+    - name: Wait For RPC Server
+      shell: bash
+      env:
+        RPC_PORT: ${{ inputs.rpcServerPort }}
+        STARTUP_TIMEOUT: ${{ inputs.serverStartupTimeout }}
+      run: |
+        URL="http://localhost:${RPC_PORT}/"
+        DEADLINE=$(( SECONDS + STARTUP_TIMEOUT ))
+
+        echo "Waiting up to ${STARTUP_TIMEOUT}s for the RPC server on ${URL}..."
+
+        while [ "$SECONDS" -lt "$DEADLINE" ]; do
+          if curl --silent --fail -H "Content-Type: application/json" \
+               --data '{"jsonrpc":"2.0","method":"reset","params":[],"id":1}' \
+               "$URL" >/dev/null 2>&1; then
+            echo "RPC server is ready."
+            exit 0
+          fi
+          sleep 2
+        done
+
+        echo "::error title=RPC server not ready::No response from ${URL} after ${STARTUP_TIMEOUT}s."
+        if [ -n "${HIERO_RPC_CONTAINER:-}" ] && [ "$(docker ps -aq -f name="$HIERO_RPC_CONTAINER")" ]; then
+          echo "::group::${HIERO_RPC_CONTAINER} logs"
+          docker logs "$HIERO_RPC_CONTAINER" 2>&1 || true
+          echo "::endgroup::"
+        fi
+        exit 1
+
+    - name: Run TCK Test Suite
+      id: tck
+      shell: bash
+      working-directory: 'hiero-tck'
+      env:
+        OPERATOR_ACCOUNT_ID: ${{ inputs.operatorAccountId }}
+        OPERATOR_ACCOUNT_PRIVATE_KEY: ${{ inputs.operatorPrivateKey }}
+        NODE_IP: ${{ inputs.nodeIp }}
+        NODE_ACCOUNT_ID: ${{ inputs.nodeAccountId }}
+        NODE_TIMEOUT: ${{ inputs.nodeTimeout }}
+        MIRROR_NETWORK: ${{ inputs.mirrornodeGrpcUrl }}
+        MIRROR_NODE_REST_URL: ${{ inputs.mirrornodeRestUrl }}
+        MIRROR_NODE_REST_JAVA_URL: ${{ inputs.mirrornodeRestJavaUrl }}
+        JSON_RPC_SERVER_URL: "http://localhost:${{ inputs.rpcServerPort }}/"
+        TEST_MATRIX: ${{ inputs.testMatrix }}
+        TEST_SCRIPT: ${{ inputs.testScript }}
+        TCK_TAG: ${{ inputs.tckTag }}
+      # The suite is always allowed to run to completion. Its exit code is
+      # recorded rather than propagated here so that the report is collected and
+      # the container logs are dumped before the action fails the job.
+      run: |
+        ARGS=()
+
+        if [ -n "$TEST_MATRIX" ]; then
+          # test:file carries no spec glob of its own, so only what is named here
+          # runs. Split via xargs rather than word-splitting, so a quoted
+          # --grep 'some phrase' survives as a single argument.
+          SCRIPT="test:file"
+          while IFS= read -r arg; do
+            [ -n "$arg" ] && ARGS+=("$arg")
+          done < <(printf '%s' "$TEST_MATRIX" | xargs -n1 printf '%s\n')
+          echo "::notice title=Targeted TCK run::Running only: ${TEST_MATRIX}"
+        else
+          SCRIPT="$TEST_SCRIPT"
+          # test:ci postdates some tags; 'test' is the equivalent full-suite
+          # script on those, minus the heap profiling and the result gate.
+          if ! node -e "process.exit(require('./package.json').scripts?.['${SCRIPT}'] ? 0 : 1)"; then
+            echo "::warning title=TCK script missing::'${SCRIPT}' is not in this TCK tag (${TCK_TAG}); falling back to 'test'."
+            SCRIPT="test"
+          fi
+        fi
+
+        echo "Running: npm run ${SCRIPT} -- ${ARGS[*]}"
+
+        # Output is teed so the results step can mine it for the
+        # "Method <x> not found" lines the mochawesome report never carries.
+        set +e
+        if [ ${#ARGS[@]} -gt 0 ]; then
+          npm run "$SCRIPT" -- "${ARGS[@]}" 2>&1 | tee tck-output.log
+        else
+          npm run "$SCRIPT" 2>&1 | tee tck-output.log
+        fi
+        code=${PIPESTATUS[0]}
+        set -e
+
+        echo "exitCode=${code}" >> "$GITHUB_OUTPUT"
+
+        if [ "$code" -ne 0 ]; then
+          echo "::warning title=TCK suite failed::mocha exited with code ${code}. See the results summary below."
+        fi
+
+    - name: Collect TCK Results
+      id: results
+      if: always()
+      shell: bash
+      working-directory: 'hiero-tck'
+      run: |
+        REPORT="mochawesome-report/mochawesome.json"
+
+        if [ ! -f "$REPORT" ]; then
+          echo "::error title=No TCK report::Expected ${REPORT} but the suite produced none. It did not run to completion."
+          {
+            echo "total=0"
+            echo "passed=0"
+            echo "failed=0"
+            echo "pending=0"
+            echo "hookFailures=0"
+            echo "skipped=0"
+            echo "registered=0"
+            echo "reportPath="
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### Hiero TCK Results"
+            echo ""
+            echo "No report was produced - the suite did not run to completion."
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+        fi
+
+        # mocha's console "failing" count is stats.failures + stats.other, where
+        # "other" is failed before/after hooks. A hook failure skips every test in
+        # its suite, so stats.skipped is reported too - those tests never ran and
+        # are counted in neither passes nor failures.
+        read -r TOTAL PASSED FAILED PENDING OTHER SKIPPED REGISTERED DURATION < <(
+          jq -r '.stats | [
+            (.tests // 0), (.passes // 0), (.failures // 0), (.pending // 0),
+            (.other // 0), (.skipped // 0), (.testsRegistered // 0),
+            ((.duration // 0) / 1000 | floor)
+          ] | @tsv' "$REPORT"
+        )
+
+        ALL_FAILURES=$((FAILED + OTHER))
+
+        # Classify each failure by its error message. A run against an unhealthy
+        # network fails in bulk with server errors that say nothing about SDK
+        # compatibility; separating those from genuine assertion failures is the
+        # difference between a usable report and a misleading one.
+        GROUPS_FILE="$(mktemp)"
+        jq '
+          def clean: (.err.message // "unknown")
+            | gsub("\n"; " ") | gsub(" +at .*"; "") | .[0:110];
+          def kind: if test("Internal error|unhealthy") then "server"
+                    elif test("Hiero error") then "network"
+                    elif test("^TypeError") then "harness"
+                    else "test" end;
+          [ .. | objects | select(.fail? == true)
+            | { title: (.fullTitle // "<untitled>"), cause: clean } ]
+          | map(. + {kind: (.cause | kind)})
+          | group_by(.cause) | sort_by(-length)
+        ' "$REPORT" > "$GROUPS_FILE"
+
+        DETAIL=$(jq -r  '[.[] | length] | add // 0' "$GROUPS_FILE")
+        GENUINE=$(jq -r '[.[] | select(.[0].kind == "test") | length] | add // 0' "$GROUPS_FILE")
+        INFRA=$(jq -r   '[.[] | select(.[0].kind != "test") | length] | add // 0' "$GROUPS_FILE")
+
+        # Unimplemented methods appear only on stdout, never in the report.
+        UNIMPL=""
+        if [ -f tck-output.log ]; then
+          UNIMPL=$(grep -oE "Method [A-Za-z0-9_]+ not found" tck-output.log 2>/dev/null \
+                   | sed 's/^Method //; s/ not found$//' | sort -u || true)
+        fi
+        UNIMPL_COUNT=$(printf '%s' "$UNIMPL" | grep -c . || true)
+
+        {
+          echo "total=${TOTAL}"
+          echo "passed=${PASSED}"
+          echo "failed=${FAILED}"
+          echo "pending=${PENDING}"
+          echo "hookFailures=${OTHER}"
+          echo "skipped=${SKIPPED}"
+          echo "registered=${REGISTERED}"
+          echo "genuineFailures=${GENUINE}"
+          echo "infraFailures=${INFRA}"
+          echo "unimplementedMethods=$(printf '%s' "$UNIMPL" | tr '\n' ',' | sed 's/,$//')"
+          echo "reportPath=hiero-tck/mochawesome-report"
+        } >> "$GITHUB_OUTPUT"
+
+        {
+          echo "### Hiero TCK Results"
+          echo ""
+          echo "| Total | Passed | Failed | Pending | Hook failures | Skipped | Duration |"
+          echo "| ----: | -----: | -----: | ------: | ------------: | ------: | -------: |"
+          echo "| ${TOTAL} | ${PASSED} | ${FAILED} | ${PENDING} | ${OTHER} | ${SKIPPED} | $((DURATION / 60))m $((DURATION % 60))s |"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        # The headline judgement: is this run a valid measurement at all?
+        if [ "$DETAIL" -gt 0 ] && [ "$INFRA" -gt 0 ] && [ "$GENUINE" -eq 0 ]; then
+          {
+            echo ""
+            echo "> [!CAUTION]"
+            echo "> All ${INFRA} failures are server or network errors, not SDK incompatibilities."
+            echo "> **This run is not a valid compatibility measurement.** The network or the server"
+            echo "> under test became unhealthy. Re-run over fewer tests per network - see testMatrix."
+          } >> "$GITHUB_STEP_SUMMARY"
+        elif [ "$INFRA" -gt 0 ]; then
+          {
+            echo ""
+            echo "> [!WARNING]"
+            echo "> ${INFRA} of ${DETAIL} failures are server or network errors rather than SDK"
+            echo "> incompatibilities. Genuine test failures: **${GENUINE}**."
+          } >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+        if [ "$SKIPPED" -gt 0 ]; then
+          {
+            echo ""
+            echo "> [!WARNING]"
+            echo "> ${OTHER} suite hook(s) failed, so ${SKIPPED} of ${REGISTERED} registered tests never ran."
+            echo "> Those tests are counted as neither passed nor failed."
+          } >> "$GITHUB_STEP_SUMMARY"
+        elif [ "$OTHER" -gt 0 ]; then
+          {
+            echo ""
+            echo "> [!WARNING]"
+            echo "> ${OTHER} suite hook(s) failed. Hook failures are counted separately from test failures."
+          } >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+        if [ "$UNIMPL_COUNT" -gt 0 ]; then
+          {
+            echo ""
+            echo "**Not implemented by this SDK (${UNIMPL_COUNT})** - reported as pending, not failed."
+            echo ""
+            printf '%s\n' "$UNIMPL" | sed 's/^/- `/; s/$/`/'
+          } >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+        if [ "$DETAIL" -gt 0 ]; then
+          {
+            echo ""
+            echo "**Failures by cause**"
+            echo ""
+            echo "| Count | Cause | Kind |"
+            echo "| ----: | ----- | ---- |"
+            jq -r '.[] | "| \(length) | `\(.[0].cause)` | \(.[0].kind) |"' "$GROUPS_FILE"
+            echo ""
+            echo "<details><summary>Failing tests (${DETAIL})</summary>"
+            echo ""
+            jq -r '.[]
+              | "##### \(.[0].kind) - \(.[0].cause) (\(length))", "",
+                (.[0:40][] | "- \(.title)"),
+                (if length > 40 then "- _...and \(length - 40) more_" else empty end),
+                ""' "$GROUPS_FILE"
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+        elif [ "$ALL_FAILURES" -gt 0 ]; then
+          {
+            echo ""
+            echo "> [!NOTE]"
+            echo "> The report carries no per-test detail, so the ${ALL_FAILURES} failures cannot be"
+            echo "> classified and the HTML report will be empty. mochawesome does not populate"
+            echo "> results under mocha's parallel mode - re-run with testScript: test:serial to see which tests failed."
+          } >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+    - name: Upload TCK Report
+      if: always() && inputs.uploadReport == 'true' && steps.results.outputs.reportPath != ''
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: ${{ inputs.artifactName }}
+        path: ${{ steps.results.outputs.reportPath }}
+        if-no-files-found: warn
+        retention-days: 14
+
+    - name: Dump RPC Server Logs
+      if: always() && steps.tck.outputs.exitCode != '' && steps.tck.outputs.exitCode != '0'
+      shell: bash
+      run: |
+        if [ -n "${HIERO_RPC_CONTAINER:-}" ] && [ "$(docker ps -aq -f name="$HIERO_RPC_CONTAINER")" ]; then
+          echo "::group::${HIERO_RPC_CONTAINER} logs"
+          docker logs "$HIERO_RPC_CONTAINER" 2>&1 || true
+          echo "::endgroup::"
+        else
+          echo "No RPC server container found - nothing to dump."
+        fi
+
+    - name: CleanUp RPC Server Container
+      if: always()
+      shell: bash
+      run: |
+        if [ -n "${HIERO_RPC_CONTAINER:-}" ] && [ "$(docker ps -aq -f name="$HIERO_RPC_CONTAINER")" ]; then
+          echo "Stopping and removing ${HIERO_RPC_CONTAINER}..."
+          docker rm -f "$HIERO_RPC_CONTAINER" || true
+        fi
+
+    - name: Fail On TCK Test Failures
+      if: always() && steps.tck.outputs.exitCode != '' && steps.tck.outputs.exitCode != '0'
+      shell: bash
+      env:
+        FAILED: ${{ steps.results.outputs.failed }}
+        HOOKS: ${{ steps.results.outputs.hookFailures }}
+        SKIPPED: ${{ steps.results.outputs.skipped }}
+        TOTAL: ${{ steps.results.outputs.total }}
+      run: |
+        echo "TCK suite failed: ${FAILED} test failure(s) and ${HOOKS} hook failure(s) out of ${TOTAL} tests."
+        if [ "${SKIPPED:-0}" -gt 0 ] 2>/dev/null; then
+          echo "${SKIPPED} further registered test(s) never ran."
+        fi
+        exit 1
