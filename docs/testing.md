@@ -183,3 +183,67 @@ the bind address.
 **x86_64 and arm64.** `CMakePresets.json` only covers linux-x64, so the Dockerfile configures
 CMake explicitly and picks the vcpkg triplet from `TARGETARCH`. That is what lets it build
 natively on an Apple Silicon machine instead of under emulation.
+
+
+## Swift SDK
+
+The Swift SDK is the cheap case. Its server is the `HieroTCK` Vapor executable in
+[`hiero-ledger/hiero-sdk-swift`](https://github.com/hiero-ledger/hiero-sdk-swift), built by
+[`dockerfiles/swift_sdk.Dockerfile`](../dockerfiles/swift_sdk.Dockerfile). The whole image
+builds in about **two minutes** - less than a single CMake configure on the C++ SDK - so none
+of the caching advice applies here.
+
+```yaml
+- name: Run TCK
+  uses: hiero-hackers/hiero-tck-action@main
+  with:
+    dockerfilePath: ./Sources/HieroTCK/Dockerfile
+    serverEnv: |
+      TCK_PORT=8544
+```
+
+Reference run: **42 passing, 0 failing**, no unimplemented methods, on TCK `v0.12.4` against
+`src/tests/crypto-service/test-account-create-transaction.ts`. The whole job took **12 minutes**
+on `ubuntu-latest` - 6 for Solo, 6 for the action, of which the suite itself was 35 seconds.
+
+### Things specific to this SDK
+
+**It has to be a debug build.** `Sources/HieroTCK/main.swift` does `@testable import Hiero`,
+and that only links against a module compiled with `-enable-testing` - the default in debug and
+not in release. `swift build -c release` fails with *module 'Hiero' was not compiled for
+testing*; upstream CI builds plain `swift build` for the same reason.
+
+**Do not check out the `protobufs` submodule.** It points at `hiero-consensus-node`, a 634 MB
+repository, and nothing in the build reads it: the generated Swift is committed under
+`Sources/HieroProtobufs/Generated`, and the target excludes `Protos` outright.
+
+**Keep SwiftPM's scratch directory off the source tree.** `swift package resolve` writes to
+`./.build`, so a later `COPY . .` overwrites the resolved dependencies with whatever the build
+context happens to carry. Passing `--scratch-path /build` to both `resolve` and `build` puts it
+somewhere the copy cannot reach.
+
+**A `.dockerignore` is close to mandatory.** A working clone's `.build/` reaches tens of
+gigabytes - 14 GB in the one measured here - and `docker build` sends all of it as context:
+
+```
+.build/
+protobufs/
+.git/
+```
+
+That takes the context from 16 GB to about 9 MB.
+
+**The port and hostname come from the serve command.** `main.swift` hardcodes
+`configuration.port = 8544` and leaves Vapor's default `127.0.0.1` hostname, but Vapor's `serve`
+command overrides both, so the entrypoint can bind every interface and honour `TCK_PORT`:
+
+```dockerfile
+ENTRYPOINT ["/bin/sh", "-c", "exec /app/HieroTCK serve --hostname 0.0.0.0 --port \"${TCK_PORT:-8544}\""]
+```
+
+Binding `0.0.0.0` rather than loopback means this image, unlike the C++ one, also works behind a
+published port (`-p 8544:8544`) and can therefore be smoke-tested on a macOS workstation.
+
+**Coverage.** The server implements crypto, contract, file, key, token and topic methods plus
+`setup`/`reset`/`setOperator`. There is no schedule service, so `src/tests/schedule-service/*`
+reports as unimplemented rather than failing.
