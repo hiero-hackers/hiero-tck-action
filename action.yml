@@ -33,6 +33,16 @@ inputs:
     description: "Seconds to wait for the JSON-RPC server to become ready"
     required: false
     default: "120"
+  dockerBuildArgs:
+    description: >
+      Extra arguments appended to `docker build`, parsed like a shell command line so
+      quoted values survive. Intended for layer caching on SDKs whose server takes tens of
+      minutes to compile: pair it with docker/setup-buildx-action (install: true) and pass
+      "--load --cache-from type=gha --cache-to type=gha,mode=max". Also accepts --build-arg,
+      --platform and --target. Note that --load is required whenever the buildx builder is
+      not the default docker driver, or the built image will not exist for `docker run`.
+    required: false
+    default: ""
 
   # --- Network under test --------------------------------------------------
   nodeIp:
@@ -153,31 +163,19 @@ runs:
         echo "HIERO_RPC_CONTAINER=hiero-rpc-${SUFFIX}" >> "$GITHUB_ENV"
         echo "HIERO_RPC_IMAGE=hiero-rpc-server:${SUFFIX}" >> "$GITHUB_ENV"
 
-    - name: Checkout Hiero TCK Repository
-      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      with:
-        repository: 'hiero-ledger/hiero-sdk-tck'
-        ref: ${{ inputs.tckTag }}
-        path: 'hiero-tck'
-
-    - name: Setup Node.js
-      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-      with:
-        node-version: 22
-        cache: 'npm'
-        cache-dependency-path: 'hiero-tck/package-lock.json'
-
-    - name: Install TCK Dependencies
-      shell: bash
-      working-directory: 'hiero-tck'
-      run: npm ci
-
+    # Deliberately ahead of the TCK checkout. `docker build` takes the workspace
+    # as its context, so checking out hiero-tck/ first would push the suite and
+    # its node_modules into every image built by a Dockerfile that does
+    # `COPY . .`, and would change the context enough to miss any layer cache a
+    # previous build in the same job had warmed. Building first also lets the
+    # server boot while npm is still installing.
     - name: Build and Start TCK Server Container
       shell: bash
       env:
         START_SERVER: ${{ inputs.startServer }}
         DOCKERFILE_PATH: ${{ inputs.dockerfilePath }}
         SERVER_ENV: ${{ inputs.serverEnv }}
+        DOCKER_BUILD_ARGS: ${{ inputs.dockerBuildArgs }}
       run: |
         if [ "$START_SERVER" != "true" ]; then
           echo "startServer is false - expecting the workflow to have started a server already."
@@ -200,10 +198,39 @@ runs:
           echo "Passing ${line%%=*} to the server container."
         done <<< "$SERVER_ENV"
 
+        # Split via xargs rather than word-splitting, so a quoted value such as
+        # --cache-to 'type=gha,mode=max' survives as a single argument.
+        BUILD_ARGS=()
+        if [ -n "$DOCKER_BUILD_ARGS" ]; then
+          while IFS= read -r arg; do
+            [ -n "$arg" ] && BUILD_ARGS+=("$arg")
+          done < <(printf '%s' "$DOCKER_BUILD_ARGS" | xargs -n1 printf '%s\n')
+          echo "Extra docker build arguments: ${BUILD_ARGS[*]}"
+        fi
+
         echo "Building server image from ${DOCKERFILE_PATH}..."
-        docker build -t "$HIERO_RPC_IMAGE" -f "$DOCKERFILE_PATH" .
+        docker build "${BUILD_ARGS[@]}" -t "$HIERO_RPC_IMAGE" -f "$DOCKERFILE_PATH" .
 
         docker run -d --network host --name "$HIERO_RPC_CONTAINER" "${ENV_ARGS[@]}" "$HIERO_RPC_IMAGE"
+
+    - name: Checkout Hiero TCK Repository
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        repository: 'hiero-ledger/hiero-sdk-tck'
+        ref: ${{ inputs.tckTag }}
+        path: 'hiero-tck'
+
+    - name: Setup Node.js
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        node-version: 22
+        cache: 'npm'
+        cache-dependency-path: 'hiero-tck/package-lock.json'
+
+    - name: Install TCK Dependencies
+      shell: bash
+      working-directory: 'hiero-tck'
+      run: npm ci
 
     - name: Wait For RPC Server
       shell: bash

@@ -33,6 +33,7 @@ For a details and refrences, see the [Testing Guide](./docs/testing.md).
 | `rpcServerPort` | Port the JSON-RPC server listens on | `8544` |
 | `serverEnv` | Environment passed to the container, one `KEY=VALUE` per line | `""` |
 | `serverStartupTimeout` | Seconds to wait for the server to answer | `120` |
+| `dockerBuildArgs` | Extra arguments appended to `docker build`, e.g. `--cache-from`/`--cache-to`, `--build-arg`. See [slow-building SDKs](#slow-building-sdks). | `""` |
 
 ### Network under test
 
@@ -128,6 +129,46 @@ steps:
 > [!TIP]
 > A common pattern is `testMatrix` on pull requests for fast feedback, and the full suite
 > nightly on a schedule.
+
+
+## Slow-building SDKs
+
+For the Java and Python SDKs the image build is noise. For a compiled SDK it is the entire
+run: on `ubuntu-latest` the C++ server takes **~58 minutes** to build, against **30 seconds**
+for the spec that then exercises it. Two things make that bearable.
+
+**Put the expensive layers above `COPY . .`.** A Dockerfile that copies the source in before
+building its dependencies re-does everything on every commit. Copy in only the files that pin
+the dependencies, build them, and copy the source last - see
+[`dockerfiles/cpp_sdk.Dockerfile`](./dockerfiles/cpp_sdk.Dockerfile), where the 22-minute vcpkg
+layer is keyed on `vcpkg.json` alone and survives any source change.
+
+**Then cache those layers across runs** with `dockerBuildArgs`:
+
+```yml
+- uses: docker/setup-buildx-action@v3
+  with:
+    install: true          # makes `docker build` use buildx
+
+- uses: hiero-hackers/hiero-tck-action@main
+  with:
+    dockerfilePath: ./src/tck/Dockerfile
+    dockerBuildArgs: "--load --cache-from type=gha --cache-to type=gha,mode=max"
+```
+
+> [!IMPORTANT]
+> `--load` is required whenever buildx is not using the plain `docker` driver. Without it the
+> image is built and discarded, and the action's `docker run` fails with "Unable to find image".
+
+> [!NOTE]
+> The GitHub Actions cache is capped at 10 GB per repository, which a large C++ build stage can
+> exceed. If layers keep being evicted, cache to a registry instead
+> (`type=registry,ref=ghcr.io/OWNER/REPO:buildcache`), or publish a prebuilt dependencies image
+> and start the Dockerfile `FROM` it.
+
+Note that the action builds the server image *before* it checks out the TCK, so the build
+context is your repository as checked out, and nothing the action itself adds. A Dockerfile
+doing `COPY . .` gets your sources and nothing else.
 
 
 ##  Outputs
