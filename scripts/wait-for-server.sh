@@ -14,12 +14,18 @@ deadline=$((SECONDS + STARTUP_TIMEOUT))
 # JSON-RPC" - two different faults that used to produce the same error.
 tcp_seen=false
 
+# Callers establish that the container exists first. Guarding this on
+# `docker ps` swallowed the logs on the crash path, where the container is
+# known to exist because it was just inspected.
 dump_container_logs() {
-  [[ -n "${HIERO_RPC_CONTAINER:-}" ]] || return 0
-  [[ -n "$(docker ps -aq -f name="$HIERO_RPC_CONTAINER" 2>/dev/null)" ]] || return 0
   echo "::group::${HIERO_RPC_CONTAINER} logs"
   docker logs "$HIERO_RPC_CONTAINER" 2>&1 || true
   echo "::endgroup::"
+}
+
+container_exists() {
+  [[ -n "${HIERO_RPC_CONTAINER:-}" ]] || return 1
+  [[ -n "$(docker ps -aq -f name="$HIERO_RPC_CONTAINER" 2>/dev/null)" ]]
 }
 
 echo "Waiting up to ${STARTUP_TIMEOUT}s for the RPC server on ${url}..."
@@ -66,7 +72,7 @@ if [[ "$tcp_seen" == "true" ]]; then
 else
   echo "::error title=RPC server not ready::No response from ${url} after ${STARTUP_TIMEOUT}s."
 fi
-if [[ "$START_SERVER" == "true" ]]; then
+if [[ "$START_SERVER" == "true" ]] && container_exists; then
   dump_container_logs
 fi
 exit 1

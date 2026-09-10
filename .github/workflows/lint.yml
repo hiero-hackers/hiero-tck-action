@@ -43,8 +43,8 @@ jobs:
       - name: Lint shell scripts
         run: |
           set -euo pipefail
-          shellcheck scripts/*.sh tests/*.bats tests/fixtures/docker-* \
-            tests/fixtures/npm-record
+          shellcheck scripts/*.sh tests/*.bats tests/setup_suite.bash \
+            tests/fixtures/docker-* tests/fixtures/npm-record
 
       - name: Lint YAML
         run: |

@@ -43,6 +43,9 @@
 - The Go preset builds a statically linked binary on a pinned base image, replacing a
   glibc-linked binary shipped onto musl behind `libc6-compat`, and uses `go mod download`
   rather than `go mod tidy`, which rewrites the committed dependency set during a build.
+- A crashing container's logs are printed again. The refactor that introduced a shared
+  log-dumping helper guarded it on `docker ps`, which the crash path does not satisfy, so the
+  `::group::` block disappeared from exactly the failure it exists to explain.
 - An invalid `serverEnv` line now explains itself. The validation ran inside a pipeline, so
   its `::error` annotation was swallowed by the downstream `awk` and the run failed with no
   message at all.
@@ -60,6 +63,9 @@
   Workflows that set neither are unaffected.
 - Scripts avoid expanding empty arrays under `set -u`, which aborts on bash 3.2 and prevented
   `start-server.sh` from running on a macOS workstation.
+- The bats suite refuses to run on bash 3.2, the /bin/bash on macOS, where bats silently
+  passes a failing assertion unless it is the last command in a test. The suite reported green
+  on a workstation while failing on a runner; `tests/setup_suite.bash` now stops that.
 - The lint workflow runs actionlint from its pinned image and relies on the runner's
   preinstalled shellcheck, rather than building actionlint from source, which routinely took
   the job past its own two-minute timeout.
