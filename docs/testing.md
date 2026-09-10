@@ -128,7 +128,16 @@ and is built by [`dockerfiles/cpp_sdk.Dockerfile`](../dockerfiles/cpp_sdk.Docker
 ```
 
 Reference run: **42 passing, 0 failing**, no unimplemented methods, on TCK `v0.12.4` against
-`src/tests/crypto-service/test-account-create-transaction.ts`.
+`src/tests/crypto-service/test-account-create-transaction.ts`. The job took **81 minutes** on
+`ubuntu-latest`: 5 for Solo, 75 for the action, of which the suite itself was 33 seconds.
+
+> [!TIP]
+> The image build competes with Solo, which is already running by the time the action starts.
+> Building the same Dockerfile in a step *before* Solo costs nothing extra - the action's own
+> `docker build` then hits the daemon's layer cache - and the compile gets the runner to itself,
+> which measured 58 minutes rather than 75. This only works because the action builds from a
+> clean context; a warm-up build placed before an action that checked out the TCK first would
+> miss the cache entirely and compile twice.
 
 ### Build cost
 
@@ -247,3 +256,73 @@ published port (`-p 8544:8544`) and can therefore be smoke-tested on a macOS wor
 **Coverage.** The server implements crypto, contract, file, key, token and topic methods plus
 `setup`/`reset`/`setOperator`. There is no schedule service, so `src/tests/schedule-service/*`
 reports as unimplemented rather than failing.
+
+
+## JavaScript SDK
+
+The JS SDK already ships a `tck/Dockerfile`, but it is not the one to point the action at.
+That file runs `pnpm add @hiero-ledger/sdk@^2.70.0`, so it tests the **published** package
+rather than the branch under review, and it expects the build context to be `tck/` while the
+action always builds from the repository root.
+
+[`dockerfiles/js_sdk.Dockerfile`](../dockerfiles/js_sdk.Dockerfile) builds the SDK from the
+checkout, packs it, and installs that tarball over the pinned dependency. Add it to the
+repository as `tck/Dockerfile.local` so it sits beside the original without replacing it:
+
+```yaml
+- name: Run TCK
+  uses: hiero-hackers/hiero-tck-action@main
+  with:
+    dockerfilePath: ./tck/Dockerfile.local
+    serverEnv: |
+      TCK_PORT=8544
+```
+
+The image builds in about **three minutes**, most of it `pnpm install` over ~2750 packages and
+the rollup bundle.
+
+Reference run: **42 passing, 0 failing**, no unimplemented methods, on TCK `v0.12.4` against
+`src/tests/crypto-service/test-account-create-transaction.ts`. The job took **10 minutes** on
+`ubuntu-latest`: 5.5 for Solo, 4.5 for the action, of which the suite itself was 29 seconds.
+
+### Things specific to this SDK
+
+**Do not check out the `packages/proto/src/services` submodule.** It points at
+`hiero-consensus-node`, and `task build` was verified to complete without it. Checking out
+submodules costs a 634 MB clone for nothing.
+
+**Pin pnpm and go-task rather than using corepack.** The root `package.json` declares no
+`packageManager` field, so `corepack enable` has nothing to resolve against and may pick a pnpm
+that disagrees with `pnpm-lock.yaml`. `.github/workflows/build.yml` is the reference:
+pnpm `9.15.5`, go-task `3.35.1`.
+
+**Delete the pinned SDK before installing, and copy `tck/` before deleting it.** The order
+matters in both directions:
+
+```dockerfile
+COPY tck/ ./
+COPY --from=sdk-builder /sdk-package/*.tgz /tmp/hiero-sdk.tgz
+RUN npm pkg delete "dependencies.@hiero-ledger/sdk" \
+    && npm install \
+    && npm install /tmp/hiero-sdk.tgz
+```
+
+Copying `tck/` *after* the install puts the original `package.json` back and restores the
+published dependency in the manifest. `npm ci` cannot be used at all here, because deleting the
+dependency puts `package.json` and `package-lock.json` out of agreement.
+
+**Assert which SDK got installed.** Nothing fails loudly if the local tarball is not picked up -
+the suite just quietly tests the published package. One line in the build turns that into a
+build failure:
+
+```dockerfile
+RUN node -e "console.log(require.resolve('@hiero-ledger/sdk'))"
+```
+
+Checking the resolved version against the root `package.json` version is the real
+confirmation: the reference build reported `2.88.0`, the version in the checkout, rather than
+the `2.84.0` pinned by `tck/package.json`.
+
+**The port is `argv[2]`, and Express binds every interface.** `tck/server.ts` defaults to 8544
+and takes an override as its first script argument, so the entrypoint maps `TCK_PORT` onto it.
+Unlike the C++ image, this one works behind a published port as well as under `--network host`.
