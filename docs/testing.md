@@ -128,7 +128,16 @@ and is built by [`dockerfiles/cpp_sdk.Dockerfile`](../dockerfiles/cpp_sdk.Docker
 ```
 
 Reference run: **42 passing, 0 failing**, no unimplemented methods, on TCK `v0.12.4` against
-`src/tests/crypto-service/test-account-create-transaction.ts`.
+`src/tests/crypto-service/test-account-create-transaction.ts`. The job took **81 minutes** on
+`ubuntu-latest`: 5 for Solo, 75 for the action, of which the suite itself was 33 seconds.
+
+> [!TIP]
+> The image build competes with Solo, which is already running by the time the action starts.
+> Building the same Dockerfile in a step *before* Solo costs nothing extra - the action's own
+> `docker build` then hits the daemon's layer cache - and the compile gets the runner to itself,
+> which measured 58 minutes rather than 75. This only works because the action builds from a
+> clean context; a warm-up build placed before an action that checked out the TCK first would
+> miss the cache entirely and compile twice.
 
 ### Build cost
 
