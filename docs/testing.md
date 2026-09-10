@@ -111,3 +111,75 @@ A working example of the TCK Runner with a fork of the Hiero Java SDK is availab
 
 - [Forked Hiero SDK Java test-tck-action branch](https://github.com/manishdait/hiero-sdk-java/tree/poc/tck-action)
 - [TCK Runner Workflow Logs For Java Sdk](https://github.com/manishdait/hiero-sdk-java/actions/runs/33973314167/job/101325555201)
+
+## C++ SDK
+
+The C++ SDK is the slow case, and the one that shaped the action's build step. Its server
+lives at `src/tck` in [`hiero-ledger/hiero-sdk-cpp`](https://github.com/hiero-ledger/hiero-sdk-cpp)
+and is built by [`dockerfiles/cpp_sdk.Dockerfile`](../dockerfiles/cpp_sdk.Dockerfile).
+
+```yaml
+- name: Run TCK
+  uses: hiero-hackers/hiero-tck-action@main
+  with:
+    dockerfilePath: ./src/tck/Dockerfile
+    serverEnv: |
+      TCK_PORT=8544
+```
+
+Reference run: **42 passing, 0 failing**, no unimplemented methods, on TCK `v0.12.4` against
+`src/tests/crypto-service/test-account-create-transaction.ts`.
+
+### Build cost
+
+Measured on `ubuntu-latest` (4 vCPU) and on an Apple M5 (10 cores, `-j 6`). Both land near
+an hour, so this is the size of the work rather than a slow runner:
+
+| Layer | M5 | Notes |
+| ----- | -: | ----- |
+| vcpkg dependencies | 22m 30s | OpenSSL, protobuf, gRPC, Abseil, all from source |
+| SDK + HAPI protobufs | 26m 24s | ~900 translation units, mostly generated `.pb.cc` |
+| vcpkg clone + bootstrap | 18s | |
+| HAPI shallow clone | 19s | `--depth 1`, against a 634 MB full clone otherwise |
+| CMake configure | 5s | |
+| **Total** | **50m 04s** | 58m on `ubuntu-latest` |
+
+Give the job `timeout-minutes: 180`, and free disk before it runs - the build needs roughly
+30 GB, more than an `ubuntu-latest` runner has spare:
+
+```yaml
+- name: Free disk space
+  run: |
+    sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc "$AGENT_TOOLSDIRECTORY" || true
+```
+
+See [Slow-building SDKs](../README.md#slow-building-sdks) for caching these layers between runs.
+
+### Things specific to this SDK
+
+**`BUILD_TCK` is off by default.** Without `-DBUILD_TCK=ON` the server target is never
+generated and the build succeeds having produced nothing.
+
+**Ninja Multi-Config needs the configuration twice.** The `linux-x64-release` preset uses a
+multi-config generator, so `cmake --install` without `--config Release` looks for Debug
+artifacts that were never built and fails.
+
+**The port is `argv[1]`, not an environment variable.** `TckServer` takes it as a positional
+argument, so `serverEnv: TCK_PORT=8544` is ignored unless the image maps it across. The
+Dockerfile does that in its entrypoint, keeping the container configured like the others:
+
+```dockerfile
+ENTRYPOINT ["/bin/sh", "-c", "exec /app/tck/hiero-sdk-cpp-tck \"${TCK_PORT:-8544}\""]
+```
+
+**The server binds `localhost`, not `0.0.0.0`.** This is fine under the action, which runs the
+container with `--network host`, but a published port (`-p 8544:8544`) will not reach it. On
+macOS, where host networking is unavailable, the image cannot be smoke-tested without changing
+the bind address.
+
+**Dependencies Ubuntu does not ship.** `SystemLibraries.cmake` hard-fails without `zip` and
+`linux-libc-dev`, and vcpkg's OpenSSL port needs `perl`. None are in `ubuntu:24.04`.
+
+**x86_64 and arm64.** `CMakePresets.json` only covers linux-x64, so the Dockerfile configures
+CMake explicitly and picks the vcpkg triplet from `TARGETARCH`. That is what lets it build
+natively on an Apple Silicon machine instead of under emulation.
