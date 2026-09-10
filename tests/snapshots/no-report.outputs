@@ -1,0 +1,11 @@
+total=0
+passed=0
+failed=0
+pending=0
+hookFailures=0
+skipped=0
+registered=0
+genuineFailures=0
+infraFailures=0
+unimplementedMethods=
+reportPath=

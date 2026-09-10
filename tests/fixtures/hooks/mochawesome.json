@@ -1,0 +1,1 @@
+{"stats":{"tests":1,"passes":1,"failures":0,"pending":0,"other":1,"skipped":2,"testsRegistered":3,"duration":1500},"results":[{"fail":true,"fullTitle":"suite before all hook","err":{"message":"TypeError: setup failed"}}]}

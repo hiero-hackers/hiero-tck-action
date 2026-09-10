@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo called > "${DOCKER_CALLED_FILE:?}"
+exit 1

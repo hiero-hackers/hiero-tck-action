@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+case "$1 $2" in
+  "inspect -f")
+    if [[ "$3" == "{{.State.Running}}" ]]; then
+      echo false
+    else
+      echo 17
+    fi
+    ;;
+  "logs rpc") echo "fatal startup error" ;;
+esac

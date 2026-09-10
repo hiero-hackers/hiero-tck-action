@@ -1,0 +1,1 @@
+{"stats":{"tests":3,"passes":1,"failures":2,"pending":0,"other":0,"skipped":0,"testsRegistered":3,"duration":4000},"results":[{"fail":true,"fullTitle":"creates account","err":{"message":"expected 1 to equal 2"}},{"fail":true,"fullTitle":"updates account","err":{"message":"Internal error: server unhealthy"}}]}

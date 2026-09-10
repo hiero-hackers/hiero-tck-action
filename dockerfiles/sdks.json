@@ -1,0 +1,94 @@
+{
+  "cpp": {
+    "dockerfile": "cpp_sdk.Dockerfile",
+    "name": "Hiero C++ SDK",
+    "repo": "hiero-ledger/hiero-sdk-cpp",
+    "aliases": [
+      "c++",
+      "cplusplus"
+    ],
+    "serverEnv": {
+      "TCK_PORT": "8544"
+    },
+    "rpcServerPort": "8544",
+    "expectedBuildMinutes": 60
+  },
+  "go": {
+    "dockerfile": "go_sdk.Dockerfile",
+    "name": "Hiero Go SDK",
+    "repo": "hiero-ledger/hiero-sdk-go",
+    "aliases": [
+      "golang"
+    ],
+    "serverEnv": {
+      "TCK_PORT": "8544"
+    },
+    "rpcServerPort": "8544",
+    "expectedBuildMinutes": 3
+  },
+  "java": {
+    "dockerfile": "java_sdk.Dockerfile",
+    "name": "Hiero Java SDK",
+    "repo": "hiero-ledger/hiero-sdk-java",
+    "aliases": [
+      "jvm"
+    ],
+    "serverEnv": {
+      "SERVER_PORT": "8544"
+    },
+    "rpcServerPort": "8544",
+    "expectedBuildMinutes": 12
+  },
+  "javascript": {
+    "dockerfile": "js_sdk.Dockerfile",
+    "name": "Hiero JavaScript SDK",
+    "repo": "hiero-ledger/hiero-sdk-js",
+    "aliases": [
+      "js",
+      "node"
+    ],
+    "serverEnv": {
+      "TCK_PORT": "8544"
+    },
+    "rpcServerPort": "8544",
+    "expectedBuildMinutes": 4
+  },
+  "python": {
+    "dockerfile": "python_sdk.Dockerfile",
+    "name": "Hiero Python SDK",
+    "repo": "hiero-ledger/hiero-sdk-python",
+    "aliases": [
+      "py"
+    ],
+    "serverEnv": {
+      "TCK_HOST": "0.0.0.0",
+      "TCK_PORT": "8544"
+    },
+    "rpcServerPort": "8544",
+    "expectedBuildMinutes": 2
+  },
+  "rust": {
+    "dockerfile": "rust_sdk.Dockerfile",
+    "name": "Hiero Rust SDK",
+    "repo": "hiero-ledger/hiero-sdk-rust",
+    "aliases": [
+      "rs"
+    ],
+    "serverEnv": {},
+    "rpcServerPort": "8544",
+    "expectedBuildMinutes": 6
+  },
+  "swift": {
+    "dockerfile": "swift_sdk.Dockerfile",
+    "name": "Hiero Swift SDK",
+    "repo": "hiero-ledger/hiero-sdk-swift",
+    "aliases": [
+      "ios"
+    ],
+    "serverEnv": {
+      "TCK_PORT": "8544"
+    },
+    "rpcServerPort": "8544",
+    "expectedBuildMinutes": 4
+  }
+}

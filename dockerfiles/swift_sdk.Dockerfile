@@ -1,7 +1,8 @@
 # JSON-RPC server for the Hiero SDK TCK.
 #
 # Build context is the repository root:
-#   docker build -f Sources/HieroTCK/Dockerfile -t hiero-sdk-swift-tck .
+#   docker build -f /path/to/action/dockerfiles/swift_sdk.Dockerfile \
+#     -t hiero-sdk-swift-tck .
 #
 # The `protobufs` submodule is not needed: the generated Swift lives under
 # Sources/HieroProtobufs/Generated and is committed. Add a .dockerignore listing

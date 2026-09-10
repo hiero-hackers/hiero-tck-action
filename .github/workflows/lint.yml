@@ -1,0 +1,58 @@
+---
+name: Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Check out action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # shellcheck is preinstalled on ubuntu-latest, and actionlint runs from its
+      # pinned image below. `go install actionlint` used to dominate this job and
+      # regularly pushed it past its own timeout.
+      - name: Install lightweight test tools
+        env:
+          BATS_REF: eb7f42f8d608ac693d7a4b67474f6714ea68cfc5
+        run: |
+          set -euo pipefail
+          git clone --quiet https://github.com/bats-core/bats-core.git /tmp/bats-core
+          git -C /tmp/bats-core checkout --quiet --detach "$BATS_REF"
+          echo "/tmp/bats-core/bin" >> "$GITHUB_PATH"
+          pipx install yamllint==1.38.0
+
+      - name: Lint workflows and action metadata
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 -color
+          ruby -e 'require "yaml"; YAML.load_file("action.yml")'
+
+      - name: Lint shell scripts
+        run: |
+          set -euo pipefail
+          shellcheck scripts/*.sh tests/*.bats tests/setup_suite.bash \
+            tests/fixtures/docker-* tests/fixtures/npm-record
+
+      - name: Lint YAML
+        run: |
+          set -euo pipefail
+          yamllint action.yml .github/workflows
+
+      - name: Run Bats suite
+        run: bats tests
+
+      - name: Validate SDK registry
+        run: scripts/validate-sdks.sh

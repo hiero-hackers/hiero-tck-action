@@ -1,7 +1,8 @@
 # JSON-RPC server for the Hiero SDK TCK.
 #
 # Build context is the repository root, so build it from there:
-#   docker build -f tck/Dockerfile.local -t hiero-sdk-js-tck .
+#   docker build -f /path/to/action/dockerfiles/js_sdk.Dockerfile \
+#     -t hiero-sdk-js-tck .
 #
 # This differs from the tck/Dockerfile already in the repository, which installs
 # @hiero-ledger/sdk from npm and therefore tests the published package. This one

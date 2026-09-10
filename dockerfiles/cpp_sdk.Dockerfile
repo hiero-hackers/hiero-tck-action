@@ -1,7 +1,8 @@
 # JSON-RPC server for the Hiero SDK TCK.
 #
 # Build context is the repository root:
-#   docker build -f src/tck/Dockerfile -t hiero-sdk-cpp-tck .
+#   docker build -f /path/to/action/dockerfiles/cpp_sdk.Dockerfile \
+#     -t hiero-sdk-cpp-tck .
 #
 # The expensive layers are ordered above `COPY . .` and keyed on the two files
 # that actually pin them, vcpkg.json and HieroApi.cmake, so a source-only change

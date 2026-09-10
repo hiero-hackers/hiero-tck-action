@@ -5,8 +5,6 @@ ENV PDM_BUILD_SCM_VERSION=0.1.0
 
 WORKDIR /app
 
-RUN apt update && apt install
-
 COPY . .
 
 RUN uv sync --all-extras

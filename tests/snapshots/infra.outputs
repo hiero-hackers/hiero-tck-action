@@ -1,0 +1,11 @@
+total=2
+passed=0
+failed=2
+pending=0
+hookFailures=0
+skipped=0
+registered=2
+genuineFailures=0
+infraFailures=2
+unimplementedMethods=
+reportPath=hiero-tck/mochawesome-report
