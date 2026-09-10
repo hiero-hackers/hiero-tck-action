@@ -1,0 +1,1 @@
+{"stats":{"tests":2,"passes":0,"failures":2,"pending":0,"other":0,"skipped":0,"testsRegistered":2,"duration":3000},"results":[{"fail":true,"fullTitle":"creates account","err":{"message":"Internal error: server unhealthy"}},{"fail":true,"fullTitle":"updates account","err":{"message":"Hiero error: BUSY"}}]}

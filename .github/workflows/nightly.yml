@@ -1,0 +1,90 @@
+---
+name: Nightly SDK matrix
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      sdk: ${{ steps.registry.outputs.sdk }}
+    steps:
+      - name: Check out action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Read SDK registry
+        id: registry
+        run: |
+          set -euo pipefail
+          # `ref` is optional in the registry: empty tracks the SDK's default
+          # branch, which is the point of a nightly, but a maintainer can pin a
+          # known-good ref there when an upstream main is broken, without
+          # touching this workflow.
+          matrix=$(jq -c '[to_entries[] | {
+            id: .key,
+            repo: .value.repo,
+            ref: (.value.ref // ""),
+            testMatrix: (if .key == "python" then "" else
+              "src/tests/crypto-service/test-account-create-transaction.ts" end)
+          }]' dockerfiles/sdks.json)
+          echo "sdk=${matrix}" >> "$GITHUB_OUTPUT"
+
+  tck:
+    needs: matrix
+    strategy:
+      fail-fast: false
+      matrix:
+        sdk: ${{ fromJSON(needs.matrix.outputs.sdk) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      # The SDK goes in its own directory so that the .action checkout beside it
+      # stays out of the Docker build context, which buildContext then points at.
+      - name: Check out SDK
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ matrix.sdk.repo }}
+          ref: ${{ matrix.sdk.ref }}
+          path: sdk
+
+      - name: Check out action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository }}
+          path: .action
+
+      - name: Set up Buildx for C++ layer caching
+        if: matrix.sdk.id == 'cpp'
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+        with:
+          install: true
+
+      - name: Free disk for the C++ build
+        if: matrix.sdk.id == 'cpp'
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+
+      - name: Start Hiero Solo
+        uses: hiero-ledger/hiero-solo-action@6a79c9451fc1b26a98536facc3b988ab122ffbc8 # v0.24.0
+        with:
+          installMirrorNode: true
+
+      - name: Run TCK
+        uses: ./.action
+        with:
+          sdk: ${{ matrix.sdk.id }}
+          buildContext: ${{ github.workspace }}/sdk
+          testMatrix: ${{ matrix.sdk.testMatrix }}
+          dockerBuildArgs: ${{ matrix.sdk.id == 'cpp' && '--load --cache-from type=gha --cache-to type=gha,mode=max' || '' }}
+          artifactName: nightly-${{ matrix.sdk.id }}

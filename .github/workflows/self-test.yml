@@ -1,0 +1,58 @@
+---
+name: Self test
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: self-test-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # The SDK goes in its own directory so that the .action checkout beside it
+      # stays out of the Docker build context, which buildContext then points at.
+      - name: Check out Python SDK
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: hiero-ledger/hiero-sdk-python
+          path: sdk
+
+      - name: Check out this action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: .action
+
+      - name: Start Hiero Solo
+        uses: hiero-ledger/hiero-solo-action@6a79c9451fc1b26a98536facc3b988ab122ffbc8 # v0.24.0
+        with:
+          installMirrorNode: true
+
+      - name: Run targeted Python SDK test
+        id: tck
+        uses: ./.action
+        with:
+          sdk: python
+          buildContext: ${{ github.workspace }}/sdk
+          testMatrix: src/tests/crypto-service/test-account-create-transaction.ts
+          artifactName: self-test-python
+
+      - name: Assert action outputs
+        if: always()
+        env:
+          TOTAL: ${{ steps.tck.outputs.total }}
+          REPORT_PATH: ${{ steps.tck.outputs.reportPath }}
+          INFRA_FAILURES: ${{ steps.tck.outputs.infraFailures }}
+        run: |
+          set -euo pipefail
+          [[ "$TOTAL" =~ ^[1-9][0-9]*$ ]]
+          [[ -n "$REPORT_PATH" ]]
+          [[ "$INFRA_FAILURES" == "0" ]]

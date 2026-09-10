@@ -15,9 +15,7 @@ Add this step to your GitHub Actions workflow file (e.g., `.github/workflows/tck
 - name: Run Hiero TCK Test Suite
   uses: hiero-hackers/hiero-tck-action@main
   with:
-    dockerfilePath: './tck/Dockerfile'
-    serverEnv: |
-      TCK_PORT=8544
+    sdk: python
 ```
 
 For a details and refrences, see the [Testing Guide](./docs/testing.md).
@@ -28,12 +26,54 @@ For a details and refrences, see the [Testing Guide](./docs/testing.md).
 
 | Input | Description | Default |
 | ----- | ----------- | ------- |
-| `startServer` | Build and run the server from `dockerfilePath`. Set `false` if your workflow starts it (it must background and terminate it; the action then only waits for it to answer). | `true` |
-| `dockerfilePath` | Path to the Dockerfile, relative to repository root | `./Dockerfile` |
-| `rpcServerPort` | Port the JSON-RPC server listens on | `8544` |
-| `serverEnv` | Environment passed to the container, one `KEY=VALUE` per line | `""` |
+| `startServer` | Build and run the server. Set `false` if your workflow starts it (it must background and terminate it; the action then only waits for it to answer). | `true` |
+| `sdk` | Recommended: bundled SDK server preset. The workspace must be that SDK's checkout. | `""` |
+| `dockerfilePath` | Escape hatch: custom Dockerfile path, relative to the workspace (not to `buildContext`). Mutually exclusive with `sdk`. Falls back to `./Dockerfile` when neither is set. | `""` |
+| `rpcServerPort` | Port the JSON-RPC server listens on. Overrides a preset; otherwise 8544. | preset / `8544` |
+| `serverEnv` | Environment passed to the container, one `KEY=VALUE` per line. Keys override preset defaults. | preset / `""` |
 | `serverStartupTimeout` | Seconds to wait for the server to answer | `120` |
+| `buildContext` | Directory used as the `docker build` context. Set it when the SDK is checked out into a subdirectory. | workspace root |
 | `dockerBuildArgs` | Extra arguments appended to `docker build`, e.g. `--cache-from`/`--cache-to`, `--build-arg`. See [slow-building SDKs](#slow-building-sdks). | `""` |
+
+### Supported SDK presets
+
+Presets select a Dockerfile and server defaults; they do not fetch source. The workflow must
+first check out the matching upstream SDK. Every bundled Dockerfile builds that checkout using
+the consumer workspace as its Docker build context.
+
+<!-- sdk-table:start -->
+| ID | SDK | Aliases | Upstream | Expected build |
+| -- | --- | ------- | -------- | -------------: |
+| `cpp` | Hiero C++ SDK | `c++`, `cplusplus` | [hiero-ledger/hiero-sdk-cpp](https://github.com/hiero-ledger/hiero-sdk-cpp) | 60 min |
+| `go` | Hiero Go SDK | `golang` | [hiero-ledger/hiero-sdk-go](https://github.com/hiero-ledger/hiero-sdk-go) | 3 min |
+| `java` | Hiero Java SDK | `jvm` | [hiero-ledger/hiero-sdk-java](https://github.com/hiero-ledger/hiero-sdk-java) | 12 min |
+| `javascript` | Hiero JavaScript SDK | `js`, `node` | [hiero-ledger/hiero-sdk-js](https://github.com/hiero-ledger/hiero-sdk-js) | 4 min |
+| `python` | Hiero Python SDK | `py` | [hiero-ledger/hiero-sdk-python](https://github.com/hiero-ledger/hiero-sdk-python) | 2 min |
+| `rust` | Hiero Rust SDK | `rs` | [hiero-ledger/hiero-sdk-rust](https://github.com/hiero-ledger/hiero-sdk-rust) | 6 min |
+| `swift` | Hiero Swift SDK | `ios` | [hiero-ledger/hiero-sdk-swift](https://github.com/hiero-ledger/hiero-sdk-swift) | 4 min |
+<!-- sdk-table:end -->
+
+The C++ preset is intentionally called out as slow: budget about an hour and use the layer
+cache configuration below. `serverEnv` and `rpcServerPort` remain available for overrides.
+
+> [!IMPORTANT]
+> The build context is the workspace, so anything else checked out beside the SDK ends up in
+> it - and inside every image built by a Dockerfile that does `COPY . .`. When the workflow
+> checks out more than the SDK, give the SDK its own directory and point `buildContext` at it:
+>
+> ```yaml
+> - uses: actions/checkout@v7.0.1
+>   with:
+>     repository: hiero-ledger/hiero-sdk-python
+>     path: sdk
+> - uses: hiero-hackers/hiero-tck-action@main
+>   with:
+>     sdk: python
+>     buildContext: ${{ github.workspace }}/sdk
+> ```
+>
+> Leaving stray directories in the context also changes it on every run, which costs the C++
+> preset its layer cache and about half an hour.
 
 ### Network under test
 
@@ -76,7 +116,7 @@ minutes**. Nothing needs configuring:
 ```yml
 - uses: hiero-hackers/hiero-tck-action@main
   with:
-    dockerfilePath: './tck/Dockerfile'
+    sdk: python
 ```
 
 **While implementing a single method**, name its spec file with `testMatrix`. Only that file is
@@ -185,6 +225,9 @@ job. Results come from the mochawesome report the suite writes to `hiero-tck/moc
 | `hookFailures` | Failed suite hooks, counted separately from test failures |
 | `skipped` | Registered tests that never ran, usually after a hook failure |
 | `registered` | Tests registered by the suite, including those that never ran |
+| `genuineFailures` | Genuine assertion failures, excluding server/network failures |
+| `infraFailures` | Server, network, or harness failures |
+| `unimplementedMethods` | Comma-separated JSON-RPC methods reported as not implemented |
 | `reportPath` | Path to the mochawesome report directory, empty if no report was produced |
 
 In addition, the action writes a pass/fail table (and a collapsed list of failing tests) to the
@@ -215,6 +258,9 @@ To act on the results yourself, give the step an `id` and read its outputs:
 - **Linux runners only.** The server container is started with `--network host` so it can reach
   Solo on `localhost`. Host networking is a no-op on macOS and Windows runners.
 - **Docker and `jq`** must be present. Both are preinstalled on `ubuntu-latest`.
+- **A crashing managed server fails fast.** The action reports its exit code and groups its
+  container logs instead of waiting for the startup timeout. Externally started servers are
+  still polled for the full timeout because the action cannot determine their lifecycle.
 - **The action runs `actions/setup-node`**, which changes the Node version for the rest of the
   job. If your workflow depends on a specific Node version afterwards, re-run `setup-node`.
 - **`operatorPrivateKey` is masked** via `::add-mask::`, but action inputs are not secrets.
@@ -222,8 +268,8 @@ To act on the results yourself, give the step an `id` and read its outputs:
 
 > [!IMPORTANT]
 > `rpcServerPort` tells the action where to *probe*; it does not tell your server where to
-> *listen*. Use `serverEnv` to pass the port through in whatever form your server expects
-> (`TCK_PORT`, `PORT`, ...), or the two will disagree.
+> *listen*. SDK presets configure both values together. With a custom `dockerfilePath`, use
+> `serverEnv` to pass the port through in whatever form your server expects, or they may disagree.
 
 ## Usage
 
@@ -260,9 +306,7 @@ jobs:
         id: tck
         uses: hiero-hackers/hiero-tck-action@main
         with:
-          dockerfilePath: './tck/Dockerfile'
-          serverEnv: |
-            TCK_PORT=8544
+          sdk: python
           # Fast, targeted run on PRs; whole suite on the nightly.
           testMatrix: ${{ github.event_name == 'pull_request' && 'src/tests/crypto-service/test-account-create-transaction.ts' || '' }}
           artifactName: tck-report-${{ github.event_name }}

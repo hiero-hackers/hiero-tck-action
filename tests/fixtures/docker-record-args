@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Records each docker invocation as one tab-separated line in $DOCKER_ARGS_FILE
+# and answers the few queries the scripts make.
+set -euo pipefail
+
+printf '%s\t' "$@" >> "${DOCKER_ARGS_FILE:?}"
+printf '\n' >> "${DOCKER_ARGS_FILE:?}"
+
+case "${1:-}" in
+  ps)
+    # cleanup.sh treats a non-empty id as "container exists".
+    [[ "${DOCKER_PS_EMPTY:-false}" == "true" ]] || echo deadbeef
+    ;;
+  logs) echo "container log line" ;;
+esac

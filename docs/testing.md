@@ -122,9 +122,7 @@ and is built by [`dockerfiles/cpp_sdk.Dockerfile`](../dockerfiles/cpp_sdk.Docker
 - name: Run TCK
   uses: hiero-hackers/hiero-tck-action@main
   with:
-    dockerfilePath: ./src/tck/Dockerfile
-    serverEnv: |
-      TCK_PORT=8544
+    sdk: cpp
 ```
 
 Reference run: **42 passing, 0 failing**, no unimplemented methods, on TCK `v0.12.4` against
@@ -206,9 +204,7 @@ of the caching advice applies here.
 - name: Run TCK
   uses: hiero-hackers/hiero-tck-action@main
   with:
-    dockerfilePath: ./Sources/HieroTCK/Dockerfile
-    serverEnv: |
-      TCK_PORT=8544
+    sdk: swift
 ```
 
 Reference run: **42 passing, 0 failing**, no unimplemented methods, on TCK `v0.12.4` against
@@ -273,9 +269,7 @@ repository as `tck/Dockerfile.local` so it sits beside the original without repl
 - name: Run TCK
   uses: hiero-hackers/hiero-tck-action@main
   with:
-    dockerfilePath: ./tck/Dockerfile.local
-    serverEnv: |
-      TCK_PORT=8544
+    sdk: javascript
 ```
 
 The image builds in about **three minutes**, most of it `pnpm install` over ~2750 packages and
@@ -326,3 +320,37 @@ the `2.84.0` pinned by `tck/package.json`.
 **The port is `argv[2]`, and Express binds every interface.** `tck/server.ts` defaults to 8544
 and takes an override as its first script argument, so the entrypoint maps `TCK_PORT` onto it.
 Unlike the C++ image, this one works behind a published port as well as under `--network host`.
+
+
+## Preset build times and bind addresses
+
+Every bundled preset was built from a clean upstream clone with the repository root as the
+Docker build context - the same way the action builds it - and then probed with a real
+`generateKey` JSON-RPC call. Times are wall clock on a 10-core workstation; the
+`expectedBuildMinutes` in `dockerfiles/sdks.json` are those figures roughly doubled for a
+4-vCPU runner, except C++ and JavaScript, which are taken from observed CI runs.
+
+| Preset | Measured build | Answers JSON-RPC | Binds |
+| ------ | -------------: | ---------------- | ----- |
+| `python` | 31s | yes | `0.0.0.0` via `TCK_HOST` |
+| `go` | 86s | yes | all interfaces |
+| `rust` | 158s | yes | `127.0.0.1` |
+| `javascript` | 3m 03s | yes | all interfaces |
+| `swift` | 2m 04s | yes | `0.0.0.0` via the entrypoint |
+| `java` | 6m 45s | yes | all interfaces |
+| `cpp` | 58m (CI) | yes | `127.0.0.1` |
+
+**The C++ and Rust servers bind loopback.** That is fine under the action, which always runs
+the container with `--network host`, but a published port (`-p 8544:8544`) will not reach
+them - so those two cannot be smoke-tested on a macOS workstation without sharing the
+container's network namespace:
+
+```bash
+docker run -d --name tck <image>
+docker run --rm --network container:tck curlimages/curl:8.11.1 -s \
+  -H 'Content-Type: application/json' \
+  --data '{"jsonrpc":"2.0","method":"generateKey","params":{"type":"ed25519PrivateKey"},"id":1}' \
+  http://127.0.0.1:8544/
+```
+
+The other five bind every interface and work behind a published port.
