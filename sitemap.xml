@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+      <url>
+        <loc>https://hiero-hackers.github.io/hiero-tck-action/</loc>
+      </url>
+      <url>
+        <loc>https://hiero-hackers.github.io/hiero-tck-action/getting-started/</loc>
+      </url>
+      <url>
+        <loc>https://hiero-hackers.github.io/hiero-tck-action/configure-server/</loc>
+      </url>
+      <url>
+        <loc>https://hiero-hackers.github.io/hiero-tck-action/configure-tests/</loc>
+      </url>
+      <url>
+        <loc>https://hiero-hackers.github.io/hiero-tck-action/configure-network/</loc>
+      </url>
+      <url>
+        <loc>https://hiero-hackers.github.io/hiero-tck-action/reports/</loc>
+      </url>
+      <url>
+        <loc>https://hiero-hackers.github.io/hiero-tck-action/reference/</loc>
+      </url>
+</urlset>
