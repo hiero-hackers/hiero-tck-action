@@ -1,0 +1,73 @@
+[project]
+site_name = "Hiero Tck Action — Technical Documentation"
+site_description = "Technical documentation for Hiero TCK Action"
+site_author = "Hiero Tck Action Team"
+repo_name = "hiero-hackers/hiero-tck-action"
+repo_url = "https://github.com/hiero-hackers/hiero-tck-action"
+extra_css = ["assets/stylesheets/extra.css"]
+
+nav = [
+    { "TCK Action" = [
+        { "Overview" = "index.md" },
+        { "Getting Started" = "getting-started.md" },
+        { "Configure the Server" = "configure-server.md" },
+        { "Configure TCK Tests" = "configure-tests.md" },
+        { "Configure the Network" = "configure-network.md" },
+        { "Reports and Outputs" = "reports.md" },
+        { "Inputs Reference" = "reference.md" }
+    ]}
+]
+
+
+[project.theme]
+language = "en"
+features = [
+    "announce.dismiss",
+    "content.code.copy",
+    "navigation.footer",
+    "navigation.path",
+    "navigation.sections",
+    "navigation.top",
+    "search.highlight"
+]
+
+[[project.theme.palette]]
+scheme = "default"
+primary = "purple"
+accent = "purple"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+scheme = "slate"
+primary = "purple"
+accent = "purple"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to light mode"
+
+[project.markdown_extensions.abbr]
+[project.markdown_extensions.admonition]
+[project.markdown_extensions.attr_list]
+[project.markdown_extensions.def_list]
+[project.markdown_extensions.footnotes]
+[project.markdown_extensions.md_in_html]
+[project.markdown_extensions.toc]
+permalink = true
+[project.markdown_extensions.pymdownx.details]
+[project.markdown_extensions.pymdownx.emoji]
+emoji_generator = "zensical.extensions.emoji.to_svg"
+emoji_index = "zensical.extensions.emoji.twemoji"
+[project.markdown_extensions.pymdownx.highlight]
+anchor_linenums = true
+line_spans = "__span"
+pygments_lang_class = true
+[project.markdown_extensions.pymdownx.inlinehilite]
+[project.markdown_extensions.pymdownx.superfences]
+custom_fences = [
+    { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" }
+]
+[project.markdown_extensions.pymdownx.tabbed]
+alternate_style = true
+combine_header_slug = true
+[project.markdown_extensions.pymdownx.tasklist]
+custom_checkbox = true
