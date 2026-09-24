@@ -22,7 +22,7 @@ RUN go mod download
 # Statically linked, so the runtime stage needs no libc at all. The previous
 # build left cgo on and then reached for libc6-compat to paper over a
 # glibc-linked binary landing on musl.
-RUN CGO_ENABLED=0 GOOS=linux go build -o /server ./cmd/server.go
+RUN CGO_ENABLED=0 GOOS=linux go build -mod=mod -o /server ./cmd/server.go
 
 
 FROM alpine:3.22
