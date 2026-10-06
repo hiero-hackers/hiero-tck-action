@@ -351,6 +351,78 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#motivation" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Motivation
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Motivation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#why-the-action-exists" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Why the Action Exists
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#who-benefits-from-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Who Benefits from It
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-ci-is-useful" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Why CI Is Useful
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#local-hardware-limitations" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Local Hardware Limitations
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#benefits-to-sdks" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Benefits to SDKs
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#how-it-works" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -591,6 +663,78 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#motivation" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Motivation
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Motivation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#why-the-action-exists" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Why the Action Exists
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#who-benefits-from-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Who Benefits from It
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-ci-is-useful" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Why CI Is Useful
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#local-hardware-limitations" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Local Hardware Limitations
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#benefits-to-sdks" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Benefits to SDKs
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#how-it-works" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -648,6 +792,30 @@
 <li>Collect and classify TCK results.</li>
 <li>Upload Mochawesome reports as workflow artifacts.</li>
 <li>Expose test results through GitHub Actions outputs.</li>
+</ul>
+<hr />
+<h2 id="motivation">Motivation<a class="headerlink" href="#motivation" title="Permanent link">&para;</a></h2>
+<p>The Hiero TCK Action provides a  way to run the Hiero SDK TCK test-suite against an SDK's JSON-RPC server in GitHub Actions. It helps SDK maintainers and contributors validate compatibility without requiring everyone to manually set up and run the complete TCK environment.</p>
+<h3 id="why-the-action-exists">Why the Action Exists<a class="headerlink" href="#why-the-action-exists" title="Permanent link">&para;</a></h3>
+<p>Today, changes to the JSON-RPC implementation are primarily validated through unit tests and manual testing. When a pull request introduces a new JSON-RPC method or changes existing implementation logic, reviewers may need to check the implementation and, when necessary, run the TCK manually against the contributor's branch. This can require cloning the branch, setting up the required environment, starting the JSON-RPC server and network, and running the appropriate TCK tests locally.</p>
+<p>The action automates this process by handling the setup, server readiness, TCK execution, result collection, and reporting within GitHub Actions.</p>
+<h3 id="who-benefits-from-it">Who Benefits from It<a class="headerlink" href="#who-benefits-from-it" title="Permanent link">&para;</a></h3>
+<p>The action is primarily intended for <strong>SDK maintainers and contributors</strong> who develop or review JSON-RPC method implementations. It allows them to automatically validate changes against the TCK in CI, giving contributors and reviewers a consistent compatibility check without requiring them to set up and run the complete TCK environment locally.</p>
+<h3 id="why-ci-is-useful">Why CI Is Useful<a class="headerlink" href="#why-ci-is-useful" title="Permanent link">&para;</a></h3>
+<p>Running the TCK in CI makes compatibility testing part of the normal development workflow. Tests can run automatically for pull requests or other workflows, allowing compatibility regressions to be detected early.</p>
+<p>It also provides a consistent environment for running the TCK, reducing differences caused by local operating systems, dependencies, network configuration, or developer-specific setup.</p>
+<h3 id="local-hardware-limitations">Local Hardware Limitations<a class="headerlink" href="#local-hardware-limitations" title="Permanent link">&para;</a></h3>
+<p>Running the complete TCK environment locally can require significant system resources. For example, running a local <a href="https://github.com/hiero-ledger/solo">Hiero Solo</a> network can require <strong>12 GB or more of RAM</strong>.</p>
+<p>Not every maintainer or contributor has a machine capable of running the complete environment. By running the TCK through GitHub Actions, these resource requirements are moved to CI infrastructure, allowing developers to validate compatibility even when their local machines cannot run the full setup.</p>
+<h3 id="benefits-to-sdks">Benefits to SDKs<a class="headerlink" href="#benefits-to-sdks" title="Permanent link">&para;</a></h3>
+<p>Integrating the Hiero TCK Action into an SDK's CI workflow provides:</p>
+<ul>
+<li><strong>Automated compatibility testing</strong> against the Hiero SDK TCK.</li>
+<li><strong>Earlier detection of regressions</strong> in JSON-RPC implementations.</li>
+<li><strong>Consistent and reproducible test execution</strong> across SDKs.</li>
+<li><strong>Reduced manual setup</strong> for contributors and reviewers.</li>
+<li><strong>Accessible test results and reports</strong> directly from GitHub Actions.</li>
+<li><strong>Scalable execution</strong> through GitHub Actions matrix jobs.</li>
 </ul>
 <hr />
 <h2 id="how-it-works">How It Works<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h2>
