@@ -94,7 +94,7 @@ Defaults match [`hiero-solo-action`](https://github.com/hiero-ledger/hiero-solo-
 
 | Input | Description | Default |
 | ----- | ----------- | ------- |
-| `tckTag` | Tag, branch or SHA of `hiero-sdk-tck` | `v0.13.0` |
+| `tckTag` | Tag, branch or SHA of `hiero-sdk-tck` | `v0.14.0` |
 | `testMatrix` | Mocha arguments naming what to run: specs, globs, `--grep`. Runs **only** these. Overrides `testScript`. | `""` |
 | `testScript` | npm script for a whole-suite run, used when `testMatrix` is empty. Falls back to `test` on tags without `test:ci`. | `test:ci` |
 

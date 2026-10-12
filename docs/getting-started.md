@@ -113,7 +113,7 @@ The action uses a default TCK version, but you can specify the version explicitl
 ```yaml
 with:
   sdk: python
-  tckTag: v0.13.0
+  tckTag: v0.14.0
 ```
 
 You can also pin the TCK to a specific commit:
