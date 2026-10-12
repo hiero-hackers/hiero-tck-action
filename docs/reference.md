@@ -40,7 +40,7 @@ See [Configure the Network](configure-network.md) for details about configuring 
 
 | Input        | Default   | Description                                                                                                                                    |
 | ------------ | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tckTag`     | `v0.12.4` | Tag or commit SHA of `hiero-sdk-tck` to use.                                                                                                   |
+| `tckTag`     | `v0.13.0` | Tag or commit SHA of `hiero-sdk-tck` to use.                                                                                                   |
 | `testMatrix` | `""`      | Test files or globs to run. When set, runs only the specified tests using the TCK `test:file` script.                                          |
 | `testScript` | `test:ci` | npm script used for a whole-suite run when `testMatrix` is empty. Falls back to `test` if the selected TCK version does not provide `test:ci`. |
 
