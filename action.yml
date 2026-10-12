@@ -100,7 +100,7 @@ inputs:
   tckTag:
     description: "Tag or Commit SHA of hiero-sdk-tck"
     required: false
-    default: "v0.12.4"
+    default: "v0.13.0"
   testMatrix:
     description: >
       Which tests to run, as mocha arguments: spec files or globs relative to the TCK root,
